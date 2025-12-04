@@ -1,19 +1,22 @@
-FROM node:20-alpine
+FROM node:18-slim
 
-RUN apk add --no-cache openssl
+# Install OpenSSL for Prisma
+RUN apt-get update -y && apt-get install -y openssl
 
 WORKDIR /app
 
 COPY package*.json ./
-
 RUN npm install
 
-COPY prisma ./prisma/
+# Copy proto files
+COPY proto ./proto/
 
+# Copy prisma schema
+COPY prisma ./prisma/
 RUN npx prisma generate
 
 COPY . .
 
 EXPOSE 3001
 
-CMD npx prisma migrate deploy && npm start
+CMD ["sh", "-c", "npx prisma migrate deploy && npm start"]

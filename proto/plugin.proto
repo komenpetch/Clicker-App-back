@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package clicker;
+
+service ClickerPlugin {
+  // Calculate click value based on upgrades
+  rpc CalculateClickValue (ClickRequest) returns (ClickResponse);
+  
+  // Get available upgrades for user
+  rpc GetAvailableUpgrades (UpgradeRequest) returns (UpgradeResponse);
+  
+  // Purchase an upgrade
+  rpc PurchaseUpgrade (PurchaseRequest) returns (PurchaseResponse);
+  
+  // Get plugin info
+  rpc GetPluginInfo (PluginInfoRequest) returns (PluginInfoResponse);
+}
+
+message ClickRequest {
+  int32 user_id = 1;
+  int32 current_clicks = 2;
+  repeated string active_upgrades = 3;
+}
+
+message ClickResponse {
+  int32 click_value = 1;
+  string message = 2;
+}
+
+message UpgradeRequest {
+  int32 user_id = 1;
+  int32 current_clicks = 2;
+  repeated string owned_upgrades = 3;
+}
+
+message UpgradeResponse {
+  repeated Upgrade available_upgrades = 1;
+}
+
+message Upgrade {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  int32 cost = 4;
+  bool is_purchased = 5;
+  int32 multiplier = 6;
+}
+
+message PurchaseRequest {
+  int32 user_id = 1;
+  string upgrade_id = 2;
+  int32 current_clicks = 3;
+}
+
+message PurchaseResponse {
+  bool success = 1;
+  string message = 2;
+  int32 new_click_total = 3;
+  Upgrade purchased_upgrade = 4;
+}
+
+message PluginInfoRequest {}
+
+message PluginInfoResponse {
+  string name = 1;
+  string version = 2;
+  string description = 3;
+}

@@ -8,6 +8,10 @@ datasource db {
 }
 
 model Counter {
-  id    Int @id @default(autoincrement())
-  value Int @default(0)
+  id              Int      @id @default(autoincrement())
+  value           Int      @default(0)
+  clicksPerClick  Int      @default(1)
+  upgrades        String   @default("") // Comma-separated upgrade IDs
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
