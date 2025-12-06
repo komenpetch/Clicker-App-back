@@ -116,7 +116,17 @@ app.post('/api/upgrades/purchase', async (req, res) => {
     if (!counter) {
       return res.status(404).json({ error: 'Counter not found' });
     }
-    
+
+    // Check if already purchased
+    const ownedUpgrades = counter.upgrades ? counter.upgrades.split(',').filter(Boolean) : [];
+    console.log(`[Purchase] User ${counter.id}, Upgrade: ${upgradeId}, Owned: [${ownedUpgrades.join(', ')}], Raw upgrades field: "${counter.upgrades}"`);
+    if (ownedUpgrades.includes(upgradeId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Already purchased this upgrade'
+      });
+    }
+
     // Call plugin via gRPC
     const purchaseResult = await grpcClient.purchaseUpgrade(
       counter.id,
