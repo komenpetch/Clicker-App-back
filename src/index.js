@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const { PrismaClient } = require('@prisma/client');
 const grpcClient = require('./grpcClient');
+const { publishEvent } = require('./mqPublisher');
 
 const prisma = new PrismaClient();
 const app = express();
@@ -45,27 +46,42 @@ app.post('/api/counter/increment', async (req, res) => {
     if (!counter) {
       return res.status(404).json({ error: 'Counter not found' });
     }
-    
+
     const upgradeList = counter.upgrades ? counter.upgrades.split(',').filter(Boolean) : [];
-    
+
     // Call plugin via gRPC to calculate click value
     const clickResult = await grpcClient.calculateClickValue(
       counter.id,
       counter.value,
       upgradeList
     );
-    
+
     const clickValue = clickResult.click_value;
-    
+    const oldValue = counter.value;
+    const newValue = counter.value + clickValue;
+
     // Update counter
     const updated = await prisma.counter.update({
       where: { id: counter.id },
       data: {
-        value: counter.value + clickValue,
+        value: newValue,
         clicksPerClick: clickValue
       }
     });
-    
+
+    // Publish event to message queue
+    publishEvent({
+      action: 'increase',
+      amount: clickValue,
+      oldValue: oldValue,
+      newValue: newValue,
+      reason: 'manual_click',
+      metadata: {
+        userId: counter.id,
+        upgradesActive: upgradeList
+      }
+    });
+
     res.json({
       value: updated.value,
       clicksPerClick: updated.clicksPerClick,
@@ -107,11 +123,11 @@ app.get('/api/upgrades', async (req, res) => {
 app.post('/api/upgrades/purchase', async (req, res) => {
   try {
     const { upgradeId } = req.body;
-    
+
     if (!upgradeId) {
       return res.status(400).json({ error: 'upgradeId is required' });
     }
-    
+
     const counter = await prisma.counter.findFirst();
     if (!counter) {
       return res.status(404).json({ error: 'Counter not found' });
@@ -133,26 +149,44 @@ app.post('/api/upgrades/purchase', async (req, res) => {
       upgradeId,
       counter.value
     );
-    
+
     if (!purchaseResult.success) {
       return res.status(400).json({
         success: false,
         message: purchaseResult.message
       });
     }
-    
+
     // Update database
     const upgradeList = counter.upgrades ? counter.upgrades.split(',').filter(Boolean) : [];
     upgradeList.push(upgradeId);
-    
+
+    const oldValue = counter.value;
+    const newValue = purchaseResult.new_click_total;
+    const cost = oldValue - newValue;
+
     const updated = await prisma.counter.update({
       where: { id: counter.id },
       data: {
-        value: purchaseResult.new_click_total,
+        value: newValue,
         upgrades: upgradeList.join(',')
       }
     });
-    
+
+    // Publish event to message queue
+    publishEvent({
+      action: 'decrease',
+      amount: cost,
+      oldValue: oldValue,
+      newValue: newValue,
+      reason: 'purchase_upgrade',
+      metadata: {
+        userId: counter.id,
+        upgradeId: upgradeId,
+        upgradeName: purchaseResult.purchased_upgrade.name
+      }
+    });
+
     res.json({
       success: true,
       message: purchaseResult.message,
@@ -214,12 +248,29 @@ async function processAutoClicks() {
     });
 
     if (autoClicksPerSecond > 0) {
+      const oldValue = counter.value;
+      const newValue = counter.value + autoClicksPerSecond;
+
       await prisma.counter.update({
         where: { id: counter.id },
         data: {
-          value: counter.value + autoClicksPerSecond
+          value: newValue
         }
       });
+
+      // Publish event to message queue
+      publishEvent({
+        action: 'increase',
+        amount: autoClicksPerSecond,
+        oldValue: oldValue,
+        newValue: newValue,
+        reason: 'auto_click',
+        metadata: {
+          userId: counter.id,
+          upgradesActive: upgradeList
+        }
+      });
+
       console.log(`[Auto-Click] Generated ${autoClicksPerSecond} clicks`);
     }
   } catch (error) {
