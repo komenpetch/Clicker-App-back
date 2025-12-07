@@ -189,6 +189,48 @@ app.get('/api/plugin/info', async (req, res) => {
   }
 });
 
+// Auto-click generation
+async function processAutoClicks() {
+  try {
+    const counter = await prisma.counter.findFirst();
+    if (!counter) return;
+
+    const upgradeList = counter.upgrades ? counter.upgrades.split(',').filter(Boolean) : [];
+    if (upgradeList.length === 0) return;
+
+    // Get available upgrades from plugin to find auto_rate
+    const upgradesResult = await grpcClient.getAvailableUpgrades(
+      counter.id,
+      counter.value,
+      upgradeList
+    );
+
+    // Calculate total auto clicks per second
+    let autoClicksPerSecond = 0;
+    upgradesResult.available_upgrades.forEach(upgrade => {
+      if (upgrade.is_purchased && upgrade.auto_rate > 0) {
+        autoClicksPerSecond += upgrade.auto_rate;
+      }
+    });
+
+    if (autoClicksPerSecond > 0) {
+      await prisma.counter.update({
+        where: { id: counter.id },
+        data: {
+          value: counter.value + autoClicksPerSecond
+        }
+      });
+      console.log(`[Auto-Click] Generated ${autoClicksPerSecond} clicks`);
+    }
+  } catch (error) {
+    console.error('[Auto-Click] Error:', error.message);
+  }
+}
+
+// Run auto-click generation every second
+setInterval(processAutoClicks, 1000);
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Backend (Microkernel Core) running on port ${PORT}`);
+  console.log(`⏰ Auto-click generation enabled (1 tick/second)`);
 });

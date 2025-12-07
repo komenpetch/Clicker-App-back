@@ -44,6 +44,7 @@ message Upgrade {
   int32 cost = 4;
   bool is_purchased = 5;
   int32 multiplier = 6;
+  int32 auto_rate = 7;
 }
 
 message PurchaseRequest {
